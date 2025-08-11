@@ -90,4 +90,5 @@ CREATE INDEX IF NOT EXISTS idx_problem_clusters_category ON problem_clusters(cat
 ALTER TABLE user_watchlist ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage their own watchlist" ON user_watchlist
-  FOR ALL USING (auth.uid() = user_id):
+  FOR ALL USING (auth.uid() = user_id);
+`

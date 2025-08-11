@@ -1,7 +1,9 @@
+// Fixed version of src/app/api/cron/ingest-ph-data/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { ProductHuntAPI } from '@/lib/product-hunt'
 import { GeminiClient } from '@/lib/gemini'
 import { supabaseAdmin } from '@/lib/supabase'
+import { Problem } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
   // Verify cron secret
@@ -157,23 +159,31 @@ async function updateProblemClusters(gemini: GeminiClient) {
   // Simple clustering: group by category and similar text
   // In production, you'd use more sophisticated vector similarity
   
-  const { data: problems } = await supabaseAdmin
+  const { data: problems, error } = await supabaseAdmin
     .from('problems')
     .select('*')
     .order('created_at', { ascending: false })
   
-  if (!problems) return
+  if (error || !problems) {
+    console.error('Error fetching problems:', error)
+    return
+  }
+
+  // Type assertion to ensure problems is treated as Problem array
+  const typedProblems = problems as Problem[]
 
   // Group by category first
-  const categorizedProblems = problems.reduce((acc, problem) => {
-    if (!acc[problem.category]) acc[problem.category] = []
+  const categorizedProblems = typedProblems.reduce((acc: Record<string, Problem[]>, problem: Problem) => {
+    if (!acc[problem.category]) {
+      acc[problem.category] = []
+    }
     acc[problem.category].push(problem)
     return acc
-  }, {} as Record<string, typeof problems>)
+  }, {})
 
   for (const [category, categoryProblems] of Object.entries(categorizedProblems)) {
     // Simple text similarity clustering (in production, use vector similarity)
-    const clusters = await clusterProblemsByText(categoryProblems, gemini)
+    const clusters = await clusterProblemsByText(categoryProblems as Problem[], gemini)
     
     for (const cluster of clusters) {
       const avgConfidence = cluster.reduce((sum, p) => sum + p.confidence_score, 0) / cluster.length
@@ -223,13 +233,13 @@ async function updateProblemClusters(gemini: GeminiClient) {
 }
 
 async function clusterProblemsByText(
-  problems: any[],
+  problems: Problem[],
   gemini: GeminiClient
-): Promise<any[][]> {
+): Promise<Problem[][]> {
   // Simplified clustering - group similar text lengths and first words
   // In production, use proper vector similarity clustering
   
-  const clusters: any[][] = []
+  const clusters: Problem[][] = []
   const used = new Set<string>()
   
   for (const problem of problems) {
